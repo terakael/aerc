@@ -1,0 +1,16 @@
+# Query map for notmuch folders
+# Format: folder_name=notmuch query
+
+INBOX=tag:inbox
+Personal=tag:personal
+Work=tag:work
+Receipts=tag:receipts
+Archive=tag:archive
+Sent=tag:sent
+Drafts=tag:draft
+Trash=tag:trash
+[Gmail]/Bin=tag:deleted
+[Gmail]/Spam=tag:spam
+[Gmail]/Sent Mail=tag:sent
+[Gmail]/Drafts=tag:draft
+[Gmail]/All Mail=*

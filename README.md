@@ -6,26 +6,68 @@ This setup provides a fast, local-first email system that syncs with Gmail. Inst
 
 ## Architecture
 
-```
-Gmail IMAP Server
-      ↕
-   mbsync (sync tool)
-      ↕
-~/Mail/gmail/ (local Maildir)
-      ↕
-   notmuch (search index)
-      ↕
-   aerc (mail client)
+```mermaid
+graph TB
+    Gmail[Gmail IMAP Server]
+    GIN[goimapnotify<br/>IMAP IDLE watcher]
+    MBS[mbsync<br/>Sync tool]
+    Mail[~/Mail/gmail/<br/>Local Maildir]
+    NM[notmuch<br/>Search index]
+    Hook[post-new hook<br/>Auto-tagging]
+    Aerc[aerc<br/>Mail client]
+    Flag[flag-changed hook]
+    
+    Gmail -->|IDLE notifications| GIN
+    GIN -->|triggers on new mail| MBS
+    Gmail <-->|bidirectional sync| MBS
+    MBS <-->|reads/writes| Mail
+    Mail -->|indexes| NM
+    NM -->|runs after indexing| Hook
+    Hook -->|applies tags| NM
+    Aerc -->|reads mail via| NM
+    Aerc -->|sends via SMTP| Gmail
+    Aerc -->|flag changes trigger| Flag
+    Flag -->|background sync| MBS
+    
+    style Gmail fill:#EA4335
+    style Aerc fill:#4285F4
+    style NM fill:#FBBC04
+    style MBS fill:#34A853
+    style GIN fill:#FF6D00
 ```
 
-**Push notifications:**
-```
-Gmail IMAP IDLE → goimapnotify → triggers mbsync → notmuch indexes → aerc sees updates
-```
+### Data Flow
 
-**Bidirectional sync:**
-- **Gmail → aerc**: goimapnotify detects changes → mbsync syncs → notmuch indexes
-- **aerc → Gmail**: Flag changes trigger hook → mbsync pushes to Gmail
+**Incoming mail (Gmail → aerc):**
+1. Gmail receives new mail
+2. `goimapnotify` detects via IMAP IDLE (1-3 seconds)
+3. Triggers `mbsync` to download mail
+4. `mbsync` writes to `~/Mail/gmail/` Maildir
+5. `notmuch new` indexes the mail
+6. `post-new` hook applies folder-based tags
+7. `aerc` sees new mail instantly in notmuch database
+
+**Outgoing mail (aerc → Gmail):**
+1. User composes in `aerc`
+2. `aerc` sends directly via SMTP to Gmail
+3. Gmail stores in Sent folder
+4. Next `mbsync` pulls it back to local Maildir
+5. `notmuch` indexes with `+sent` tag
+
+**Flag changes (aerc → Gmail):**
+1. User marks read/unread in `aerc`
+2. `aerc` updates notmuch database
+3. `notmuch` writes Maildir flags (`synchronize_flags=true`)
+4. `flag-changed` hook triggers background `mbsync`
+5. `mbsync` pushes flag changes to Gmail
+
+**Flag changes (Gmail → aerc):**
+1. User marks read/unread in Gmail web
+2. `goimapnotify` detects change via IMAP IDLE
+3. Triggers `mbsync` to sync flags
+4. `mbsync` updates local Maildir flags
+5. `notmuch new` reads updated flags
+6. `aerc` reflects the change
 
 ## Components
 
